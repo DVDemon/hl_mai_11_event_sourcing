@@ -8,7 +8,7 @@ auto main() -> int
 {
     httplib::Client cli("localhost", 8080);
 
-    auto res = cli.Get("/request/15");
+    auto res = cli.Get("/events?from=1");
 
     if (res)
     {
