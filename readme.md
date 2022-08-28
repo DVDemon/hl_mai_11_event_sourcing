@@ -1,5 +1,10 @@
 ## Example of event sourcing pattern
 
+## Install httplib
+
+https://github.com/yhirose/cpp-httplib.git
+
+
 ### Init database
 
 create table Entity (id int not null,value varchar(256), version int, primary key (id));
