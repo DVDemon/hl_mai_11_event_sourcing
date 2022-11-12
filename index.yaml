@@ -1,0 +1,104 @@
+openapi: '3.0.0'
+info:
+  version: '1.0.0'
+  title: 'Event Sourcing API'
+  description: Test Event Sourcing
+servers:
+  - url: http://127.0.0.1:8080
+    description: Sample server
+paths:
+  /entity/{entity_id}:
+    get:
+      summary: Read a entity
+      parameters:
+        - name: entity_id
+          description: The unique identifier of the entity
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/Entity_id'
+      responses:
+        '200':
+          description: The entity corresponding to the provided `entity_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        404:
+          description: No entoty found for the provided `entity_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /entity:
+    post:
+      summary: create or change entity
+      parameters:
+        - name: entity_id
+          description: The unique identifier of the entity
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/Entity_id'
+        - name: value
+          description: The unique identifier of the entity
+          in: query
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Entity changed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        404:
+          description: No entoty found for the provided `entity_id`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        500:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+components:
+  schemas:
+    Entity_id:
+      description: The unique identifier of a entity
+      type: string
+    Entity:
+      type: object
+      required:
+        - id
+        - value
+      properties:
+        id:
+          $ref: '#/components/schemas/Entity_id'
+        value:
+          type: string
+
+    Error:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          description: A human readable error message
+          type: string
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+security:
+  - ApiKey: []

@@ -7,6 +7,7 @@
 #include <Poco/Data/SessionFactory.h>
 #include <Poco/Data/SessionPool.h>
 #include <Poco/Data/Transaction.h>
+#include <Poco/Data/RecordSet.h>
 
 #include <Poco/JSON/Object.h>
 #include <Poco/JSON/Array.h>
@@ -22,119 +23,69 @@ auto main() -> int
 
     Poco::Data::SessionPool pool("MySQL", connection_str);
 
-    srv.Get(R"(/request/(\d+))", [&pool](const httplib::Request &req, httplib::Response &res) {
-        auto numbers = req.matches[1];
-        std::string result;
-        result = "{'id': '";
-        result += numbers;
-        result += "'}";
-        std::cout << result << std::endl;
+    srv.Post("/entity", [&pool](const httplib::Request &req, httplib::Response &res)
+             {
+                if(!req.has_param("entity_id")||!req.has_param("value")) return 404;
 
-        Poco::Data::Session session(pool.get());
-        Poco::Data::Transaction tr(session);
 
-        int id = atoi(std::string(numbers).c_str());
-        std::string new_value = req.get_param_value("value");
-        std::string old_value;
-        ;
-        int version{0};
-
-        try
-        {
-            Poco::Data::Statement select(session);
-            select << "SELECT value, version FROM Entity WHERE id = ?",
-                Poco::Data::Keywords::into(old_value),
-                Poco::Data::Keywords::into(version),
-                Poco::Data::Keywords::use(id);
-
-            if (!select.done())
-                if (select.execute())
+                std::string entity_id = req.get_param_value("entity_id");
+                std::string value = req.get_param_value("value");
+                try
                 {
-                    version++;
-                    Poco::Data::Statement update(session);
-                    update << "UPDATE Entity SET version = ?, value = ? WHERE id = ?",
-                        Poco::Data::Keywords::use(version),
-                        Poco::Data::Keywords::use(new_value),
-                        Poco::Data::Keywords::use(id);
-                    update.execute();
-                }
-                else
-                {
+                    Poco::Data::Session session(pool.get());
+                    Poco::Data::Transaction tr(session);
+
                     Poco::Data::Statement insert(session);
-                    insert << "INSERT INTO Entity (id,value,version) VALUES(?,?, ?)",
-                        Poco::Data::Keywords::use(id),
-                        Poco::Data::Keywords::use(new_value),
-                        Poco::Data::Keywords::use(version);
+                    insert << "INSERT INTO Event (entity_id, value) VALUES (?,?)",
+                        Poco::Data::Keywords::use(entity_id),
+                        Poco::Data::Keywords::use(value);
                     insert.execute();
+                    tr.commit();
                 }
-
-            result = "{'id': '";
-            result += std::to_string(id);
-            result += "', 'version': '";
-            result += std::to_string(version);
-            result += "', 'old_value': '";
-            result += old_value;
-            result += "', 'new_value': '";
-            result += new_value;
-            result += "'}";
-
-            Poco::Data::Statement insert_event(session);
-            insert_event << "INSERT INTO Event (entity_id,event_value) VALUES(?,?)",
-                Poco::Data::Keywords::use(id),
-                Poco::Data::Keywords::use(result);
-            insert_event.execute();
-
-            //throw std::logic_error("some exception");
-
-            tr.commit();
-        }
-        catch (std::exception ex)
-        {
-            result = "exception";
-            std::cout << ex.what() << std::endl;
-        }
-
-
-        res.set_content(result, "text/json; charset=utf-8");
-    });
-
-    srv.Get("/events", [&pool](const httplib::Request &req, httplib::Response &res) {
-        int id_from = atoi(req.get_param_value("from").c_str());
-        std::string result("{'events': [");       
-        try
-        {
-            Poco::Data::Session session(pool.get());
-            Poco::Data::Statement select(session);
-            int id;
-            int entity_id;
-            std::string value;
-            
-            select << "SELECT id, entity_id, event_value FROM Event WHERE id >=?",
-                Poco::Data::Keywords::into(id),
-                Poco::Data::Keywords::into(entity_id),
-                Poco::Data::Keywords::into(value),
-                Poco::Data::Keywords::use(id_from),
-                Poco::Data::Keywords::range(0,1);
-
-            std::cout << "select events from " << id_from << std::endl;
-
-            while(!select.done())
-                if (select.execute())
+                catch (std::exception ex)
                 {
-                    result += "{'id': '";
-                    result += std::to_string(id);
-                    result += "', 'event': ";
-                    result += value;
-                    result += "} ,";
+                    std::cout << ex.what() << std::endl;
+                    return 404;
                 }
-        }catch(std::exception ex)
-        {
-            std::cout << ex.what() << std::endl;
-        }
-        result += "]}";
+                res.set_content("{ \'result\' : \'ok\'", "text/json; charset=utf-8");
+        return 200; });
 
-        res.set_content(result, "text/json; charset=utf-8");
-    });
+    srv.Get(R"(/entity/(\d+))", [&pool](const httplib::Request &req, httplib::Response &res)
+            {
+                std::string entity_id = req.matches[1];     
+                try
+                {
+                    Poco::Data::Session session(pool.get());
+                    Poco::Data::Statement select(session);
+                    int id;
+                    std::string value;
+                    
+                    select << "SELECT id, value FROM Event WHERE entity_id = ? ORDER BY id DESC",
+                        Poco::Data::Keywords::into(id),
+                        Poco::Data::Keywords::into(value),
+                        Poco::Data::Keywords::use(entity_id),
+                        Poco::Data::Keywords::range(0,1);
+
+                    select.execute();
+                    Poco::Data::RecordSet rs(select);
+                    if (!rs.moveFirst()) throw std::logic_error("not found");
+
+                    Poco::JSON::Object obj;
+                    obj.set("id",id);
+                    obj.set("value",value);
+                    std::stringstream ss;
+                    Poco::JSON::Stringifier::stringify(obj,ss);
+                    res.set_content(ss.str(), "text/json; charset=utf-8");
+                    
+                    return 200;
+                        
+                }catch(std::exception ex)
+                {
+                    std::cout << ex.what() << std::endl;
+                    return 404;
+                }
+
+        return 404; });
 
     std::cout << "Event Sourcing Server started at 8080" << std::endl;
     srv.listen("0.0.0.0", 8080);

@@ -13,14 +13,9 @@ endif()
 include_directories(${Poco_INCLUDE_DIRS})
 
 add_executable(event_server main_server.cpp)
-add_executable(event_client main_client.cpp)
 
 target_link_libraries(event_server ${CMAKE_THREAD_LIBS_INIT}
                                     ${Poco_LIBRARIES}
                                     "PocoDataMySQL"
-                                     OpenSSL::SSL
-                                     OpenSSL::Crypto)
-                                     
-target_link_libraries(event_client ${CMAKE_THREAD_LIBS_INIT}
                                      OpenSSL::SSL
                                      OpenSSL::Crypto)
